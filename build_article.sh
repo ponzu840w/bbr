@@ -69,12 +69,12 @@ echo "ビルドする記事番号="${artnum}
 
 # 画像サイズをケチるスクリプトファイル。長くなりすぎるから分割しただけでそこまでの汎用性はない。
 kechimbo_script=$(mktemp)
-kechimbo_script_fullpath=$(echo ${datadir}'/kechimbo.sh' | awk '{print("\""$0"\"")}')
+kechimbo_script_fullpath=$(echo ${scriptdir}'/kechimbo.sh' | awk '{print("\""$0"\"")}')
 eval ln -s -f $(echo ${kechimbo_script_fullpath}) ${kechimbo_script}
 
 # ブログマクロ定義ファイル。
 macroDefineFile=$(mktemp)
-macroDefineFile_fullpath=$(echo ${datadir}'/html_article_define.m4' | awk '{print("\""$0"\"")}')
+macroDefineFile_fullpath=$(echo ${scriptdir}'/html_article_define.m4' | awk '{print("\""$0"\"")}')
 eval ln -s -f $(echo ${macroDefineFile_fullpath}) ${macroDefineFile}
 
 # JSONデータベース。
