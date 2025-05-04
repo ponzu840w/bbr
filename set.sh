@@ -66,5 +66,5 @@ if [ $opt_new -eq 1 ];then
 fi
 
 # リンク作成
-unlink ~/blogart || true
-eval ln -sf "${scriptdir}data/article/${artnum}" "~/blogart"
+unlink ${scriptdir}'/art' || true
+eval ln -sf "${scriptdir}data/article/${artnum}" "${scriptdir}/art"
