@@ -5,6 +5,7 @@
 # 最後にビルドした記事がアップロードされる。
 # 念のためメタデータベースはバックアップを取る。
 cd $(dirname $0)
+cd "./data" || { echo "Error: ./data にアクセスできない。" >&2; exit 1; }
 server="ponzu840w.jp"
 user="web@ponzu840w.jp"
 artnum=$(echo "$@" | awk 'BEGIN{RS=FS;artnum=-1}/^[0-9]+/{artnum=sprintf("%05d",$0)}END{print artnum}')
