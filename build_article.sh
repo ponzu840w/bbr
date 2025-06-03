@@ -302,8 +302,10 @@ if [ ${opt_prev} -eq 1 ];then
     pwsh.exe -C start "http://localhost:8000/blog/blog.html?id="${artnum}
   else
     # それ以外の環境：普通の python3
-    preview_root=$(cd "$(dirname "$0")/../../../" && pwd -P)
+    #preview_root=$(cd "$(dirname "$0")/../../../" && pwd -P)
+    preview_root=$(cd "$(readlink ${datadir})/../" && pwd -P)
     eval cd "${preview_root}"
+    echo "preview_root: ${preview_root}"
     # **ポート解放処理**
     if lsof -i TCP:8000 -sTCP:LISTEN >/dev/null 2>&1; then
       echo "ポート8000を使っている前回のサーバーを終了します…"

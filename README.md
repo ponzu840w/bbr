@@ -7,6 +7,11 @@
 ## 環境構築
 ```
 ln -s /mnt/c/Users/ポン酢/OneDrive/ponzu840w.jp/blog/ data
+
+sudo apt install imagemagick
+sudo apt install pngquant
+sudo apt install zopfli
+sudo apt install ftp
 ```
 
 ## 新規記事作成
