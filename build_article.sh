@@ -292,6 +292,8 @@ cat ${macroDefineFile} - | sed -e "${fatsed}" | m4 > ./html.html
 
 echo "ハイパーテキスト展開完了"
 
+wsl_python_exe="python3.13.exe"
+
 if [ ${opt_prev} -eq 1 ];then
   echo "プレビューのためのpython httpサーバーを起動します。"
 
@@ -299,7 +301,7 @@ if [ ${opt_prev} -eq 1 ];then
     #eval cd $(echo $(dirname $0)'/../../../')
     preview_root=$(cd "$(readlink ${datadir})/../" && pwd -P)
     eval cd "${preview_root}"
-    pwsh.exe -Command python3.exe -m http.server 8000 &
+    pwsh.exe -Command "${wsl_python_exe}" -m http.server 8000 &
     echo "サーバーPID:"$!
     pwsh.exe -C start "http://localhost:8000/blog/blog.html?id="${artnum}
   else
