@@ -1,0 +1,3 @@
+### .inputrc ###
+# シンボリックリンクのディレクトリもTAB一発でhoge/まで補完
+set mark-symlinked-directories on
