@@ -3,9 +3,11 @@ require 'fileutils'
 module Bbr
   class Manager
     def initialize(root_dir)
-      @root_dir = root_dir
-      @article_dir = File.join(@root_dir, 'article')
-      @current_num_file = File.join(@root_dir, 'currentnum')
+      @root_dir = Pathname.new(root_dir)
+      #@article_dir = File.join(@root_dir, 'article')
+      #@current_num_file = File.join(@root_dir, 'currentnum')
+      @article_dir = @root_dir.join('article')
+      @current_num_file = @root_dir.join('currentnum')
     end
 
     # 現在選択中の記事番号を表示
@@ -34,7 +36,7 @@ module Bbr
       File.write(@current_num_file, formatted_id)
 
       # ルートディレクトリの 'art' シンボリックリンクを更新 (旧互換性のため)
-      update_symlink(target_path)
+#      update_symlink(target_path)
 
       puts "記事 #{formatted_id} をセットしました。"
     end
@@ -63,7 +65,34 @@ module Bbr
       set_article(new_id)
     end
 
+    # 記事をエディタで開く
+    def edit_article
+      current_id = current_article_id
+      unless current_id
+        puts "エラー: 作業中の記事が設定されていません。'bbr set <ID>' を実行してください。"
+        return
+      end
+
+      # 記事のメインm4ファイルパス
+      m4_path = @article_dir.join(current_id, "#{current_id}.m4")
+
+      unless File.exist?(m4_path)
+        puts "エラー: ファイルが見つかりません: #{m4_path}"
+        return
+      end
+
+      # 環境変数 EDITOR がなければ vim を使用
+      editor = ENV['EDITOR'] || 'vim'
+      system(editor, m4_path.to_s)
+    end
+
     private
+
+    # 現在のIDを取得するヘルパーメソッド
+    def current_article_id
+      return nil unless File.exist?(@current_num_file)
+      File.read(@current_num_file).strip
+    end
 
     # 0番以降で空いている最小のIDを探索して返す
     def next_article_id
@@ -91,13 +120,13 @@ module Bbr
       sprintf("%05d", existing_ids.size)
     end
 
-    # ルートにある 'art' リンクを更新
-    def update_symlink(target_path)
-      link_path = File.join(@root_dir, 'art')
-      # 既存リンクがあれば削除
-      FileUtils.rm(link_path) if File.symlink?(link_path) || File.exist?(link_path)
-      # シンボリックリンク作成
-      FileUtils.ln_s(target_path, link_path)
-    end
+#    # ルートにある 'art' リンクを更新
+#    def update_symlink(target_path)
+#      link_path = File.join(@root_dir, 'art')
+#      # 既存リンクがあれば削除
+#      FileUtils.rm(link_path) if File.symlink?(link_path) || File.exist?(link_path)
+#      # シンボリックリンク作成
+#      FileUtils.ln_s(target_path, link_path)
+#    end
   end
 end

@@ -35,6 +35,8 @@ when 'set'
   manager.set_article(id)
 when 'current'
   manager.show_current
+when 'edit'
+  manager.edit_article
 else
   puts "使用法: bbr [new|set|current] ..."
 end
