@@ -2,10 +2,9 @@ require 'fileutils'
 
 module Bbr
   class Manager
-    def initialize(root_dir)
+    def initialize(root_dir, system_root)
       @root_dir = Pathname.new(root_dir)
-      #@article_dir = File.join(@root_dir, 'article')
-      #@current_num_file = File.join(@root_dir, 'currentnum')
+      @system_root = Pathname.new(system_root)
       @article_dir = @root_dir.join('article')
       @current_num_file = @root_dir.join('currentnum')
     end
@@ -36,7 +35,7 @@ module Bbr
       File.write(@current_num_file, formatted_id)
 
       # ルートディレクトリの 'art' シンボリックリンクを更新 (旧互換性のため)
-#      update_symlink(target_path)
+      update_symlink(target_path)
 
       puts "記事 #{formatted_id} をセットしました。"
     end
@@ -120,13 +119,13 @@ module Bbr
       sprintf("%05d", existing_ids.size)
     end
 
-#    # ルートにある 'art' リンクを更新
-#    def update_symlink(target_path)
-#      link_path = File.join(@root_dir, 'art')
-#      # 既存リンクがあれば削除
-#      FileUtils.rm(link_path) if File.symlink?(link_path) || File.exist?(link_path)
-#      # シンボリックリンク作成
-#      FileUtils.ln_s(target_path, link_path)
-#    end
+    # ルートにある 'art' リンクを更新
+    def update_symlink(target_path)
+      link_path = @system_root.join('art')
+      # 既存リンクがあれば削除
+      FileUtils.rm(link_path) if File.symlink?(link_path) || File.exist?(link_path)
+      # シンボリックリンク作成
+      FileUtils.ln_s(target_path, link_path)
+    end
   end
 end
