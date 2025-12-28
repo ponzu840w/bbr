@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+
+require 'pathname'
+
+# 1. Rubyライブラリの場所を解決 (このスクリプトの親の親/lib)
+#    これで ~/work/bbr/bin/bbr がどこから呼ばれても lib を読み込めます
+exe_dir = Pathname.new(__dir__)
+lib_dir = exe_dir.parent.join('lib')
+$LOAD_PATH.unshift(lib_dir.to_s)
+
+require 'bbr/manager'
+
+# 2. ブログデータの場所を確認
+unless ENV['BLOG_ROOT']
+  puts "エラー: 環境変数 BLOG_ROOT が設定されていません。"
+  exit 1
+end
+
+# Pathnameオブジェクトにしておくと扱いやすい
+blog_root = Pathname.new(ENV['BLOG_ROOT'])
+
+# コマンド分岐
+command = ARGV.shift
+manager = Bbr::Manager.new(blog_root) # パスオブジェクトを渡す
+
+case command
+when 'new'
+  manager.create_new
+when 'set'
+  id = ARGV.shift
+  if id.nil?
+    puts "エラー: 記事番号を指定してください (例: bbr set 20)"
+    exit 1
+  end
+  manager.set_article(id)
+when 'current'
+  manager.show_current
+else
+  puts "使用法: bbr [new|set|current] ..."
+end
