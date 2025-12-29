@@ -60,6 +60,14 @@ when 'build'
 
   builder = Bbr::Builder.new(blog_root, system_root)
   builder.build(options)
+when 'deploy', 'upload'
+  require 'bbr/deployer'
+  remaining_args = parser.parse(ARGV)
+  id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
+  options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
+
+  deployer = Bbr::Deployer.new(blog_root)
+  deployer.deploy(options)
 when 'new'
   manager.create_new
 when 'set'

@@ -7,6 +7,8 @@ gem 'webrick'
 # JSONデータベース操作 (標準ライブラリですが、バージョン固定のため明記推奨)
 gem 'json'
 
+gem 'net-ftp'
+
 # --- 以下は開発・デバッグ用 (必須ではありませんがあると便利です) ---
 
 group :development do
