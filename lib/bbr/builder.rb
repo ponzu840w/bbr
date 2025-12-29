@@ -58,11 +58,6 @@ module Bbr
       html_content = parser.convert(src_file, target_id, is_fat_mode)
       File.write(html_file, html_content)
       puts "  [HTML] 生成完了: #{html_file}"
-
-      # 5. プレビュー
-      if options[:preview]
-        start_preview_server(target_id)
-      end
     end
 
     private
@@ -72,43 +67,5 @@ module Bbr
       File.read(@current_num_file).strip
     end
 
-    def start_preview_server(id)
-      puts "\n=== プレビューサーバー起動 ==="
-      # ポート8000で起動。親ディレクトリ(blogルートの親)をルートにする
-      # データ構造: .../blog/article/XXXXX
-      # URL: http://localhost:8000/blog/blog.html?id=XXXXX
-      # つまり、ドキュメントルートは @blog_root の親である必要がある
-      
-      doc_root = @blog_root.realpath.parent
-      port = 8000
-      url = "http://localhost:#{port}/blog/blog.html?id=#{id}"
-
-      puts "ドキュメントルート: #{doc_root}"
-      puts "URL: #{url}"
-      
-      # 既存のプロセスをkillする処理は割愛(RubyのWEBrickはCtrl+Cで死ぬので)
-      
-      # ブラウザ起動
-      case RUBY_PLATFORM
-      when /mswin|mingw|cygwin/ then system("start #{url}")
-      when /darwin/             then system("open #{url}")
-      when /linux/              then system("xdg-open #{url}")
-      end
-
-      # サーバー起動 (Ruby標準のWEBrickを使用)
-      require 'webrick'
-      
-      # ログを静かにする
-      log = WEBrick::Log.new($stderr, WEBrick::Log::WARN)
-      server = WEBrick::HTTPServer.new(
-        Port: port,
-        DocumentRoot: doc_root.to_s,
-        AccessLog: [],
-        Logger: log
-      )
-
-      trap 'INT' do server.shutdown end
-      server.start
-    end
   end
 end

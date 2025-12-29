@@ -13,6 +13,8 @@ $LOAD_PATH.unshift(lib_dir.to_s)
 
 require 'bbr/manager'
 require 'bbr/builder'
+require 'bbr/server'
+require 'bbr/database'
 
 # 2. ブログデータの場所を確認
 unless ENV['BLOG_ROOT']
@@ -26,14 +28,13 @@ blog_root = Pathname.new(ENV['BLOG_ROOT'])
 # コマンド分岐
 command = ARGV.shift
 manager = Bbr::Manager.new(blog_root, system_root)
+server = Bbr::Server.new(blog_root, system_root)
 
 # オプション解析
 options = {
   force: false,
   update: false,
-  preview: false,
   image_mode: :normal,
-  release: false,
   verbose: false,
   id: nil
 }
@@ -41,39 +42,110 @@ options = {
 parser = OptionParser.new do |opts|
   opts.banner = "Usage: bbr [command] [options]"
 
-  opts.on("-f", "--force", "Force update timestamp") { options[:force] = true }
-  opts.on("-u", "--update", "Update content only (keep timestamp)") { options[:update] = true }
-  opts.on("-p", "--preview", "Start preview server") { options[:preview] = true }
-  opts.on("-r", "--release", "Release build") { options[:release] = true }
+  # test用
+  opts.on("-f", "--force", "Force build (Update date & Regen images)") { options[:force] = true }
+  opts.on("-u", "--update", "Update build (Keep date & Incr images)") { options[:update] = true }
+  opts.on("--fast", "Fast build (Use fatimage, Skip optimize)") { options[:image_mode] = :fat }
+
+  # 共通
   opts.on("-v", "--verbose", "Show detailed logs") { options[:verbose] = true }
-  opts.on("-i", "Skip optimization, use fatimage (Fast Preview)") { options[:image_mode] = :fat }
-  opts.on("-I", "Skip optimization, reuse existing image (Text Fix)") { options[:image_mode] = :reuse }
+end
+
+# 内部コマンド: サーバープロセス実行
+if command == '_server'
+  server.run_foreground
+  exit
 end
 
 case command
-when 'build'
-  # 残りの引数をパース (オプション + ID)
+when 'prev'
+  # サーバー起動確認 & 起動
+  server.start_background
+  
+  # 対象ID特定 (ブラウザを開くため)
   remaining_args = parser.parse(ARGV)
-  # 数字だけの引数があればIDとして扱う
+  id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
+  target_id = id_arg || manager.get_current_path&.basename&.to_s
+  
+  if target_id
+    server.open_browser(target_id)
+  else
+    puts "記事が開かれていません。ブラウザを開くには bbr set してから実行してください。"
+  end
+
+when 'stop'
+  server.stop
+
+when 'test'
+  remaining_args = parser.parse(ARGV)
   id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
   options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
+  target_id = options[:id] || manager.get_current_path&.basename&.to_s
 
-  builder = Bbr::Builder.new(blog_root, system_root)
-  builder.build(options)
-when 'deploy', 'upload'
+  unless target_id
+    puts "エラー: 対象記事が特定できません。"
+    exit 1
+  end
+
+  # --- V1 対話ロジック ---
+  # オプション指定がない場合のみチェック
+  if !options[:force] && !options[:update] && options[:image_mode] == :normal
+    db = Bbr::Database.new(blog_root.join('database.json'))
+    if db.get_record(target_id)
+      puts "過去のビルドが存在します。"
+      puts "[C]ancel  : 中止"
+      puts "[F]orce   : 強制ビルド (日付更新 + 画像全再生成)"
+      puts "[U]pdate  : 更新ビルド (日付維持 + 画像増分)"
+      print "どうしますか？ [C/f/u]: "
+      ans = $stdin.gets.chomp.downcase
+      
+      case ans
+      when 'f'
+        options[:force] = true
+        puts "-> Force Build"
+      when 'u'
+        options[:update] = true
+        puts "-> Update Build"
+      else
+        puts "キャンセルしました。"
+        exit
+      end
+    else
+      # レコードがない場合は新規扱い（Force相当だがメッセージは出さない）
+      options[:force] = true
+    end
+  end
+  # ---
+
+  Bbr::Builder.new(blog_root, system_root).build(options)
+
+when 'clean'
+  target_id = manager.get_current_path&.basename&.to_s
+  unless target_id
+    puts "エラー: 対象記事が特定できません。"
+    exit 1
+  end
+  
+  require 'bbr/image_optimizer'
+  article_dir = blog_root.join('article', target_id)
+  optimizer = Bbr::ImageOptimizer.new(article_dir)
+  optimizer.clean
+
+when 'deploy'
   require 'bbr/deployer'
   remaining_args = parser.parse(ARGV)
   id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
   options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
+  
+  Bbr::Deployer.new(blog_root).deploy(options)
 
-  deployer = Bbr::Deployer.new(blog_root)
-  deployer.deploy(options)
+# === 管理コマンド ===
 when 'new'
   manager.create_new
 when 'set'
   id = ARGV.shift
   if id.nil?
-    puts "エラー: 記事番号を指定してください (例: bbr set 20)"
+    puts "エラー: 記事番号を指定してください"
     exit 1
   end
   manager.set_article(id)
@@ -85,11 +157,7 @@ when 'dir'
   manager.open_directory
 when 'pwd'
   path = manager.get_current_path
-  if path
-    puts path
-  else
-    exit 1
-  end
+  puts path if path
 else
-  puts "使用法: bbr [new|set|status|edit|build|dir|pwd] ..."
+  puts "使用法: bbr [prev|stop|test|clean|deploy|new|set|status|edit]"
 end

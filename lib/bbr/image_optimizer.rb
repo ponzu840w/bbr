@@ -11,6 +11,31 @@ module Bbr
       FileUtils.mkdir_p(@out_dir)
     end
 
+    def clean
+      return unless Dir.exist?(@out_dir)
+
+      # 削除対象: ドットファイル以外の全ファイル
+      files = Dir.children(@out_dir).reject { |f| f.start_with?('.') }
+
+      if files.empty?
+        puts "  [Clean] 削除する画像はありません。"
+        return
+      end
+
+      puts "  [Clean] 以下の #{files.size} ファイルを削除します:"
+      files.each { |f| puts "    - #{f}" }
+      
+      print "  よろしいですか？ (y/N): "
+      if $stdin.gets.chomp.downcase == 'y'
+        files.each do |f|
+          FileUtils.rm(@out_dir.join(f))
+        end
+        puts "  削除しました。"
+      else
+        puts "  キャンセルしました。"
+      end
+    end
+
     def run(src_path, force = false)
       puts "  [IMG] 画像最適化を開始します..."
       

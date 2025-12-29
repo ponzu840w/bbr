@@ -60,3 +60,5 @@ Gemfile.lock
 .DS_Store
 ponzu840w.jp.test/
 /data-test
+/.bbr_server.log
+/.bbr_server.pid
