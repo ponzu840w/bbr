@@ -73,6 +73,15 @@ when 'current'
   manager.show_current
 when 'edit'
   manager.edit_article
+when 'dir'
+  manager.open_directory
+when 'pwd'
+  path = manager.get_current_path
+  if path
+    puts path
+  else
+    exit 1
+  end
 else
-  puts "使用法: bbr [new|set|current|edit|build] ..."
+  puts "使用法: bbr [new|set|current|edit|build|dir|pwd] ..."
 end

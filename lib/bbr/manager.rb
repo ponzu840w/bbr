@@ -85,6 +85,32 @@ module Bbr
       system(editor, m4_path.to_s)
     end
 
+    # 【追加】現在の記事パスを返す (bbr pwd用)
+    def get_current_path
+      id = current_article_id
+      return nil unless id
+
+      path = @article_dir.join(id)
+      return path if Dir.exist?(path)
+      nil
+    end
+
+    # 【追加】ファイラーで開く (bbr dir 用)
+    def open_directory
+      path = get_current_path
+      unless path
+        puts "エラー: 現在選択されている記事がありません。"
+        return
+      end
+
+      puts "Opening: #{path}"
+      case RUBY_PLATFORM
+      when /mswin|mingw|cygwin/ then system("explorer \"#{path}\"") # Windows
+      when /darwin/             then system("open \"#{path}\"")     # macOS
+      when /linux/              then system("xdg-open \"#{path}\"") # Linux
+      end
+    end
+
     private
 
     # 現在のIDを取得するヘルパーメソッド
