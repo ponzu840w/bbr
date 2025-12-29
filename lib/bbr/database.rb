@@ -86,5 +86,28 @@ module Bbr
       puts "  [DB] データベースを更新しました。"
       return timestamp
     end
+
+    # 指定IDのレコード情報を取得する
+    def get_record(id)
+      return nil unless File.exist?(@path)
+      
+      # 行指向検索
+      lines = File.readlines(@path)
+      search_regex = /^\s*"#{id}":/
+      line = lines.find { |l| l =~ search_regex }
+      
+      return nil unless line
+
+      # 簡易パース (正規表現で抜く)
+      info = {}
+      if line =~ /"TITLE":"(.*?)"/
+        info[:title] = $1
+      end
+      if line =~ /"TIME":(\d+)/
+        info[:time] = $1.to_i
+      end
+      info
+    end
+
   end
 end

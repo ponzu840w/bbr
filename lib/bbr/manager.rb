@@ -9,14 +9,88 @@ module Bbr
       @current_num_file = @root_dir.join('currentnum')
     end
 
-    # 現在選択中の記事番号を表示
-    def show_current
-      if File.exist?(@current_num_file)
-        id = File.read(@current_num_file).strip
-        puts "現在の作業記事: #{id}"
-        puts "パス: #{File.join(@article_dir, id)}"
-      else
+    def show_status
+      id = current_article_id
+      unless id
         puts "現在選択されている記事はありません。"
+        return
+      end
+
+      article_dir = @article_dir.join(id)
+      m4_path = article_dir.join("#{id}.m4")
+      html_path = article_dir.join("html.html")
+      db_path = @root_dir.join('database.json')
+
+      puts "=== BBR Status [#{id}] ==="
+
+      # 1. タイトル取得 (m4がある場合)
+      if File.exist?(m4_path)
+        # 簡易的にタイトルだけ抜くために TextParser を使う
+        # (ただしextract_metadataはm4コマンドを叩くので少し重いが、確実)
+        begin
+          parser = TextParser.new(@root_dir)
+          meta = parser.extract_metadata(m4_path)
+          puts "Title:    #{meta[:title]}"
+        rescue => e
+          puts "Title:    (Error reading title: #{e.message})"
+        end
+      else
+        puts "Title:    (Source file not found)"
+      end
+
+      puts "Path:     #{article_dir}"
+      puts ""
+
+      # 2. データベース状況
+      puts "[Database]"
+      db = Database.new(db_path)
+      record = db.get_record(id)
+      
+      db_time = nil
+      if record
+        db_time = Time.at(record[:time])
+        puts "  Status: \e[32mRELEASED\e[0m" # 緑色
+        puts "  Time:   #{db_time.strftime('%Y-%m-%d %H:%M:%S')} (#{record[:time]})"
+      else
+        puts "  Status: \e[31mNOT REGISTERED (Draft)\e[0m" # 赤色
+      end
+      puts ""
+
+      # 3. ビルド状況
+      puts "[Build]"
+      if File.exist?(html_path)
+        html_mtime = File.mtime(html_path)
+        puts "  HTML:   Exists (#{html_mtime.strftime('%Y-%m-%d %H:%M:%S')})"
+        
+        if db_time
+          if html_mtime > db_time
+            puts "  State:  \e[33mDIRTY (HTML is newer than DB)\e[0m" # 黄色
+          else
+            puts "  State:  \e[32mCLEAN\e[0m"
+          end
+        end
+      else
+        puts "  HTML:   \e[31mNot found\e[0m"
+      end
+      puts ""
+
+      # 4. 画像状況
+      puts "[Images]"
+      fat_dir = article_dir.join('fatimage')
+      img_dir = article_dir.join('image')
+      
+      # 枚数カウント (隠しファイル除く)
+      fat_count = Dir.exist?(fat_dir) ? Dir.children(fat_dir).reject{|f| f.start_with?('.')}.size : 0
+      img_count = Dir.exist?(img_dir) ? Dir.children(img_dir).reject{|f| f.start_with?('.')}.size : 0
+
+      puts "  Source: #{fat_count} files (fatimage)"
+      puts "  Output: #{img_count} files (image)"
+
+      if fat_count == img_count
+        puts "  State:  \e[32mOK\e[0m"
+      else
+        # fatimageがあるのにimageが少ない、またはその逆
+        puts "  State:  \e[33mMISMATCH (Run 'bbr build' to optimize)\e[0m"
       end
     end
 
