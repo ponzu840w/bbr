@@ -8,14 +8,12 @@ module Bbr
     end
 
     # メタデータ (タイトル, カテゴリ, タグ) のみを抽出する
-    # 元スクリプトの `define(_begin, ...)` ハックの再現
     def extract_metadata(src_path)
       extractor_macro = <<~M4
         define(_begin,`divert(0)TITLE:$1\nCAT:$2\nTAG:$3\ndivert(-1)')
         divert(-1)
       M4
 
-      # エスケープ処理などはせず、単純にマクロ展開して情報を抜く
       raw_content = File.read(src_path)
       output, stderr, status = Open3.capture3("m4", stdin_data: extractor_macro + raw_content)
 
@@ -23,7 +21,6 @@ module Bbr
         raise "Metadata extraction failed: #{stderr}"
       end
 
-      # 解析
       data = {}
       output.each_line do |line|
         if line =~ /^TITLE:(.*)$/
@@ -37,137 +34,143 @@ module Bbr
       data
     end
 
-    # HTMLへの変換 (AWKの魔術をRubyへ移植)
+    # HTMLへの変換
     def convert(src_path, article_id, fat_image_mode = false)
       raw_content = File.read(src_path)
+      
+      # 記事ディレクトリのパスを取得 (m4実行時のカレントディレクトリ用)
+      article_dir = File.dirname(src_path)
 
-      # 1. 前処理 (Escape): コードブロック内の退避
+      # 1. 前処理: インデント処理、エスケープ、クオート挿入
       escaped_content = preprocess_escape(raw_content)
 
-      # 2. 自動タグ付与 (AWKロジックの移植: m4展開前に <p>, <li> を入れる)
+      # 2. 自動タグ付与
       tagged_content = process_auto_tags(escaped_content)
 
       # 3. m4 定義ファイルの準備
-      # 画像パスの置換設定 (fatimageモードの場合)
-      path_sed = fat_image_mode ? "define(_fatmode,1)" : "define(_fatmode,0)"
+      macro_content = File.read(@macro_file)
       
+      # -i オプション対応: 定義内の画像パスを置換
+      if fat_image_mode
+        macro_content = macro_content.gsub('image/', 'fatimage/')
+      end
+
       # 記事番号定義
       artnum_def = "define(_artnum, #{article_id})dnl\n"
 
       # 4. m4 実行
-      # 定義ファイル + 記事ソース を結合
-      full_input = path_sed + "\n" + File.read(@macro_file) + "\n" + artnum_def + tagged_content
+      # 余計なcode_macro_defを削除し、純粋にマクロファイルとコンテンツを結合
+      full_input = macro_content + "\n" + artnum_def + tagged_content
       
-      output, stderr, status = Open3.capture3("m4", stdin_data: full_input)
-      raise "m4 failed: #{stderr}" unless status.success?
+      # chdirオプションで、記事ディレクトリをカレントにして実行する
+      output, stderr, status = Open3.capture3("m4", stdin_data: full_input, chdir: article_dir)
+      
+      if !status.success?
+        # m4は警告(stderr)を出しても正常終了することがあるため、statusだけ見る
+        # 致命的なエラーがあれば警告を表示
+        puts "Warning: m4 stderr: #{stderr}" unless stderr.empty?
+        # exit codeが0以外なら例外にする
+        raise "m4 failed: #{stderr}" if status.exitstatus != 0
+      end
 
       output
     end
 
     private
 
-    # _code ブロック内のインデント削除とエスケープ
+    # コードブロック処理
     def preprocess_escape(text)
-      in_code = false
       result = []
+      state = :outer # :outer, :code_top, :in_code
 
-      # マクロ定義を埋め込む (コードブロック保護用)
-      # 元スクリプトの `code_escaper` 相当
-      code_macro_start = "define(_code,`changequote(`[[[[[',`]]]]]')')\n"
-      code_macro_end   = "define(_codeE,`changequote(`,'\'')'\'')\n"
-      
-      # 実際のテキスト処理
       text.each_line do |line|
-        # コードブロック判定
-        if line =~ /^_code(?!E)/
-          in_code = true
-          result << "\n[[[[[" + line # マクロ引数として認識させるためのクオート開始
+        # コードブロック終了判定
+        if line.start_with?('_codeE')
+          result << "]]]]]\n" + line
+          state = :outer
           next
         end
 
-        if line =~ /^_codeE/
-          in_code = false
-          result << line.chomp + "]]]]]\n" # クオート終了
-          next
-        end
-
-        if in_code
-          # コードブロック内: HTMLエスケープ & インデント削除不可(元スクリプトは削除していたが、今回はそのままにするか、要調整)
-          # 元スクリプトのAWK一段目: `match($0,/^[ \t]*/); noid=substr($0,RLENGTH+1)` -> インデント削除
-          stripped = line.sub(/^[ \t]*/, '')
-          escaped = stripped.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
-          result << escaped
+        if state == :outer
+          # lstripで改行コードごと消えてしまう空行を復元する
+          stripped = line.lstrip
+          if stripped.empty?
+            result << "\n" # 空行または空白のみの行は、単なる改行として出力
+          elsif stripped.start_with?('_code')
+            state = :code_top
+            result << stripped
+          else
+            result << stripped
+          end
         else
-          # 通常行
-          result << line
+          # コードブロック内
+          escaped = line.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
+
+          if state == :code_top
+            result << "\n[[[[[" + escaped
+            state = :in_code
+          else
+            result << escaped
+          end
         end
       end
       
-      code_macro_start + code_macro_end + result.join
+      result.join
     end
 
-    # AWKの自動タグ付与ロジックの移植
+    # 自動タグ付与
     def process_auto_tags(text)
       result = []
-      state = :outer # :outer, :p, :list, :code
+      state = :outer
       nest = 0
       
-      # インライン扱いするマクロ (これらで始まっても <p> を閉じない)
-      p_child_regex = /^_(a|img|br|inyo)/ # _inyo (blockquote) は元定義だと微妙だが、一旦インライン扱いしないとpに入らないかも
+      p_child_regex = /^_(a|img|br|inyo)/
 
       text.each_line do |line|
-        line = line.chomp
+        chomp_line = line.chomp
 
-        # 空行処理
-        if line.strip.empty?
+        if chomp_line.strip.empty?
           if state == :p
             result << "</p>"
             state = :outer
           elsif state == :code
-            result << line
+            result << chomp_line
           end
           next
         end
 
-        # 行の種類判定
-        is_macro = line.start_with?('_')
-        is_p_child = line =~ p_child_regex
+        is_macro = chomp_line.start_with?('_')
+        is_p_child = chomp_line =~ p_child_regex
         
-        # 「ストレートな行」: マクロでない、またはインラインマクロ
         if !is_macro || is_p_child
           if state == :list
-            result << "<li>#{line}" # 閉じタグ </li> はブラウザ任せ(元スクリプトの挙動)または改行で入れる
+            result << "<li>#{chomp_line}"
           elsif state != :p && state != :code
             state = :p
             result << "<p>"
-            result << line
+            result << chomp_line
           else
-            result << line
+            result << chomp_line
           end
         else
-          # ブロック要素など (<p>に含めるのが不適当な行)
           if state == :p
             result << "</p>"
             state = :outer
           end
 
-          # リスト開始判定
-          if line =~ /^_(123|kajo)([^E]|$)/
+          if chomp_line =~ /^_(123|kajo)([^E]|$)/
             state = :list
             nest += 1
-          # コード開始
-          elsif line =~ /^_code([^E]|$)/
+          elsif chomp_line =~ /^_code([^E]|$)/
             state = :code
           end
 
-          result << line
+          result << chomp_line
 
-          # リスト終了判定
-          if line =~ /^_(123|kajo)E/ && state != :code
+          if chomp_line =~ /^_(123|kajo)E/ && state != :code
             nest -= 1
             state = :outer if nest <= 0
-          # コード終了
-          elsif state == :code && line =~ /^_codeE/
+          elsif state == :code && chomp_line =~ /^_codeE/
             state = :outer
           end
         end
