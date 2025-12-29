@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 
+require 'bundler/setup'
 require 'pathname'
+require 'optparse'
 
 # 1. Rubyライブラリの場所を解決 (このスクリプトの親の親/lib)
 #    これで ~/work/bbr/bin/bbr がどこから呼ばれても lib を読み込めます
@@ -10,6 +12,7 @@ lib_dir = exe_dir.parent.join('lib')
 $LOAD_PATH.unshift(lib_dir.to_s)
 
 require 'bbr/manager'
+require 'bbr/builder'
 
 # 2. ブログデータの場所を確認
 unless ENV['BLOG_ROOT']
@@ -24,7 +27,36 @@ blog_root = Pathname.new(ENV['BLOG_ROOT'])
 command = ARGV.shift
 manager = Bbr::Manager.new(blog_root, system_root)
 
+# オプション解析
+options = {
+  force: false,
+  update: false,
+  preview: false,
+  skip_image: false,
+  release: false,
+  id: nil
+}
+
+parser = OptionParser.new do |opts|
+  opts.banner = "Usage: bbr [command] [options]"
+
+  opts.on("-f", "--force", "Force update timestamp") { options[:force] = true }
+  opts.on("-u", "--update", "Update content only (keep timestamp)") { options[:update] = true }
+  opts.on("-p", "--preview", "Start preview server") { options[:preview] = true }
+  opts.on("-i", "--skip-image", "Skip image optimization") { options[:skip_image] = true }
+  opts.on("-r", "--release", "Release build") { options[:release] = true }
+end
+
 case command
+when 'build'
+  # 残りの引数をパース (オプション + ID)
+  remaining_args = parser.parse(ARGV)
+  # 数字だけの引数があればIDとして扱う
+  id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
+  options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
+
+  builder = Bbr::Builder.new(blog_root, system_root)
+  builder.build(options)
 when 'new'
   manager.create_new
 when 'set'

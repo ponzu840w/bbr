@@ -57,7 +57,7 @@ module Bbr
       # テンプレートm4作成
       m4_path = File.join(new_dir, "#{new_id}.m4")
       unless File.exist?(m4_path)
-        File.write(m4_path, "include(../../html_article_define.m4)\n_begin(タイトル,,)\n\n本文\n\n_end")
+        File.write(m4_path, "_begin(タイトル,category,`tag1,tag2')\n\n本文\n")
       end
 
       # 作成した記事をセット
