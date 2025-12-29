@@ -44,16 +44,18 @@ module Bbr
       db.update_record(target_id, metadata, options)
 
       # 3. 画像処理
-      unless options[:skip_image]
-        optimizer = ImageOptimizer.new(article_dir)
+      if options[:image_mode] == :normal
+        optimizer = ImageOptimizer.new(article_dir, verbose: options[:verbose])
         optimizer.run(src_file, options[:force])
       else
-        puts "  [IMG] 画像処理をスキップします (-i)"
+        puts "  [IMG] 画像処理をスキップします (mode: #{options[:image_mode]})"
       end
 
       # 4. HTML生成
       # skip_image の場合は fatimage を直接参照するモードにする
-      html_content = parser.convert(src_file, target_id, options[:skip_image])
+      is_fat_mode = (options[:image_mode] == :fat)
+
+      html_content = parser.convert(src_file, target_id, is_fat_mode)
       File.write(html_file, html_content)
       puts "  [HTML] 生成完了: #{html_file}"
 

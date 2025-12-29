@@ -32,8 +32,9 @@ options = {
   force: false,
   update: false,
   preview: false,
-  skip_image: false,
+  image_mode: :normal,
   release: false,
+  verbose: false,
   id: nil
 }
 
@@ -43,8 +44,10 @@ parser = OptionParser.new do |opts|
   opts.on("-f", "--force", "Force update timestamp") { options[:force] = true }
   opts.on("-u", "--update", "Update content only (keep timestamp)") { options[:update] = true }
   opts.on("-p", "--preview", "Start preview server") { options[:preview] = true }
-  opts.on("-i", "--skip-image", "Skip image optimization") { options[:skip_image] = true }
   opts.on("-r", "--release", "Release build") { options[:release] = true }
+  opts.on("-v", "--verbose", "Show detailed logs") { options[:verbose] = true }
+  opts.on("-i", "Skip optimization, use fatimage (Fast Preview)") { options[:image_mode] = :fat }
+  opts.on("-I", "Skip optimization, reuse existing image (Text Fix)") { options[:image_mode] = :reuse }
 end
 
 case command
@@ -71,5 +74,5 @@ when 'current'
 when 'edit'
   manager.edit_article
 else
-  puts "使用法: bbr [new|set|current|edit] ..."
+  puts "使用法: bbr [new|set|current|edit|build] ..."
 end
