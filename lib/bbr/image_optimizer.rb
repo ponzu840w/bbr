@@ -24,7 +24,7 @@ module Bbr
 
       puts "  [Clean] 以下の #{files.size} ファイルを削除します:"
       files.each { |f| puts "    - #{f}" }
-      
+
       print "  よろしいですか？ (y/N): "
       if $stdin.gets.chomp.downcase == 'y'
         files.each do |f|
@@ -38,7 +38,7 @@ module Bbr
 
     def run(src_path, force = false)
       puts "  [IMG] 画像最適化を開始します..."
-      
+
       # 1. m4を使って画像リストを抽出
       extractor_macro = <<~M4
         define(_img,`divert(0)$1\t$3\t$4\ndivert(-1)')
@@ -47,7 +47,7 @@ module Bbr
 
       article_dir = File.dirname(src_path)
       raw_content = File.read(src_path)
-      
+
       output, stderr, status = Open3.capture3("m4", stdin_data: extractor_macro + raw_content, chdir: article_dir)
 
       unless status.success?
@@ -59,7 +59,7 @@ module Bbr
       output.each_line do |line|
         line.strip!
         next if line.empty?
-        
+
         filename, size_opt, color_opt = line.split("\t")
         filename = strip_quotes(filename)
         size_opt = strip_quotes(size_opt)
@@ -93,7 +93,7 @@ module Bbr
     # コマンド実行ラッパー
     def run_command(*args)
       cmd_str = args.join(' ')
-      
+
       if @verbose
         puts "    [Cmd] #{cmd_str}"
         # verboseなら標準出力をそのまま流す
@@ -109,6 +109,7 @@ module Bbr
       end
     end
 
+    # 単ファイル処理
     def optimize_single(filename, size_opt, color_opt, force)
       src_files = Dir[@fat_dir.join("#{filename}*")]
       if src_files.empty?
@@ -123,7 +124,7 @@ module Bbr
                  when 'U', 'G', 'M' then '.png'
                  else src_ext
                  end
-      
+
       basename = File.basename(filename, ".*")
       out_file = @out_dir.join(basename + dest_ext)
 
@@ -141,17 +142,24 @@ module Bbr
       # サイズオプション
       size_label = size_opt || "Default"
       resize_arg = case size_opt
+                   when 'O' then nil
                    when 'L' then '800x800>'
                    when 'S' then '350x350>'
                    when 'I' then '150x100!'
                    when /^\d+$/ then "#{size_opt}x#{size_opt}>"
-                   else '600x600>' 
+                   else '600x600>'
                    end
-      
+
       tmp_file = @out_dir.join("tmp_#{basename}#{dest_ext}")
 
       # 1. リサイズ実行
-      unless run_command("magick", src_file.to_s, "-resize", resize_arg, tmp_file.to_s)
+      convert_args = ["magick", src_file.to_s]
+      if resize_arg
+        convert_args += ["-resize", resize_arg]
+      end
+      convert_args << tmp_file.to_s
+
+      unless run_command(*convert_args)
         return
       end
 
@@ -165,8 +173,8 @@ module Bbr
                        when 'U' then 16
                        when 'I' then 8
                        when /^\d+$/ then color_opt.to_i
-                       when 'O' then nil 
-                       else 32 
+                       when 'O' then nil
+                       else 32
                        end
 
         if quant_colors
@@ -176,10 +184,10 @@ module Bbr
 
         # --- zopflipng ---
         tmp_opt_file = @out_dir.join("opt_#{basename}.png")
-        if run_command("zopflipng", "-y", "--lossy_transparent", "--lossy_8bit", "--iterations=10", "--filters=0me", tmp_file.to_s, tmp_opt_file.to_s)
+        if run_command("zopflipng", "-y", "--lossy_transparent", "--lossy_8bit", "--iterations=20", "--filters=0me", tmp_file.to_s, tmp_opt_file.to_s)
           FileUtils.mv(tmp_opt_file, tmp_file)
         end
-        
+
       when '.jpg', '.jpeg'
         # --- jpegoptim ---
         run_command("jpegoptim", "--strip-all", "-m85", tmp_file.to_s)
@@ -203,12 +211,12 @@ module Bbr
     def print_log(name, src_ext, dest_ext, src, dest, size_lbl, resize_arg, color_lbl)
       ext_str = (src_ext == dest_ext) ? src_ext : "#{src_ext}->#{dest_ext}"
       dim_str = "#{src[:w]}x#{src[:h]}->#{dest[:w]}x#{dest[:h]}"
-      
+
       diff = dest[:size] - src[:size]
       percent = src[:size] > 0 ? (diff.to_f / src[:size] * 100).round : 0
       sign = percent > 0 ? "+" : "" 
       size_str = "#{human_size(src[:size])}->#{human_size(dest[:size])}"
-      
+
       puts "    [Proc] #{name} (#{ext_str}) | Dim:#{dim_str}(#{size_lbl}) | Col:#{color_lbl} | Size:#{size_str}(#{sign}#{percent}%)"
     end
 
