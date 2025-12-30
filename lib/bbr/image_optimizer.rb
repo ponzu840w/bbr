@@ -121,12 +121,26 @@ module Bbr
 
       dest_ext = case color_opt
                  when 'P' then '.jpg'
-                 when 'U', 'G', 'M' then '.png'
+                 when 'U', 'G', 'M' , 'I' then '.png'
+                 when /^\d+$/ then '.png'
                  else src_ext
                  end
 
       basename = File.basename(filename, ".*")
-      out_file = @out_dir.join(basename + dest_ext)
+
+      is_icon_mode = (size_opt == 'I') || (color_opt == 'I')
+      ext_changed = (src_ext != dest_ext)
+
+      if ext_changed && !is_icon_mode
+        # 例: photo.png -> photo.png.jpg
+        final_filename = "#{basename}#{src_ext}#{dest_ext}"
+      else
+        # 例: photo.png -> photo.png (最適化のみ)
+        # 例: icon.png -> icon.png (Iオプション)
+        final_filename = "#{basename}#{dest_ext}"
+      end
+
+      out_file = @out_dir.join(final_filename)
 
       if File.exist?(out_file) && !force
         return
