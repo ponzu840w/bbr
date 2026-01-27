@@ -86,7 +86,7 @@ module Bbr
       text.each_line do |line|
         # コードブロック終了判定
         if line.start_with?('_codeE')
-          result << "]]]]]\n" + line
+          result << "]]]]]" + line
           state = :outer
           next
         end
@@ -98,7 +98,7 @@ module Bbr
             result << "\n" # 空行または空白のみの行は、単なる改行として出力
           elsif stripped.start_with?('_code')
             state = :code_top
-            result << stripped
+            result << stripped.chomp
           else
             result << stripped
           end
@@ -107,7 +107,7 @@ module Bbr
           escaped = line.gsub('&', '&amp;').gsub('<', '&lt;').gsub('>', '&gt;')
 
           if state == :code_top
-            result << "\n[[[[[" + escaped
+            result << "[[[[[" + escaped
             state = :in_code
           else
             result << escaped
