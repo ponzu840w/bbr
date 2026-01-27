@@ -60,7 +60,7 @@ module Bbr
 
       # 4. m4 実行
       # 余計なcode_macro_defを削除し、純粋にマクロファイルとコンテンツを結合
-      full_input = macro_content + "\n" + artnum_def + tagged_content
+      full_input = macro_content + "\n" + artnum_def + tagged_content + "\n"
       
       # chdirオプションで、記事ディレクトリをカレントにして実行する
       output, stderr, status = Open3.capture3("m4", stdin_data: full_input, chdir: article_dir)
@@ -85,7 +85,7 @@ module Bbr
 
       text.each_line do |line|
         # コードブロック終了判定
-        if line.start_with?('_codeE')
+        if line.strip.start_with?('_codeE')
           result << "]]]]]" + line
           state = :outer
           next
@@ -139,6 +139,12 @@ module Bbr
           next
         end
 
+        if state == :code && chomp_line.include?('_codeE')
+          result << chomp_line
+          state = :outer
+          next
+        end
+
         is_macro = chomp_line.start_with?('_')
         is_p_child = chomp_line =~ p_child_regex
         
@@ -170,7 +176,7 @@ module Bbr
           if chomp_line =~ /^_(123|kajo)E/ && state != :code
             nest -= 1
             state = :outer if nest <= 0
-          elsif state == :code && chomp_line =~ /^_codeE/
+          elsif state == :code && chomp_line.strip.start_with?('_codeE')
             state = :outer
           end
         end
