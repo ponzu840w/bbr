@@ -10,7 +10,7 @@ module Bbr
     # メタデータ (タイトル, カテゴリ, タグ) のみを抽出する
     def extract_metadata(src_path)
       extractor_macro = <<~M4
-        define(_begin,`divert(0)TITLE:$1\nCAT:$2\nTAG:$3\ndivert(-1)')
+        define(_begin,`divert(0)TITLE:$1\nCAT:$2\nTAG:$3\nm4exit(0)')
         divert(-1)
       M4
 

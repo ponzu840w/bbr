@@ -43,6 +43,7 @@ module Bbr
       extractor_macro = <<~M4
         define(_img,`divert(0)$1\t$3\t$4\ndivert(-1)')
         divert(-1)
+        changequote(<<<<,>>>>)
       M4
 
       article_dir = File.dirname(src_path)
