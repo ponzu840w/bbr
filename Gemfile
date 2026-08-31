@@ -1,20 +1,12 @@
 # frozen_string_literal: true
 source 'https://rubygems.org'
 
-# プレビューサーバー用 (Ruby 3.0以降で必須)
+# プレビューサーバー用 (Ruby 3.0 で標準ライブラリから外れた)
 gem 'webrick'
 
-# JSONデータベース操作 (標準ライブラリですが、バージョン固定のため明記推奨)
-gem 'json'
-
-gem 'net-ftp'
-
-# --- 以下は開発・デバッグ用 (必須ではありませんがあると便利です) ---
+# --- 以下は開発・デバッグ用 ---
 
 group :development do
-  # デバッグ用ツール (コードの途中で binding.pry と書くとそこで止めて変数を覗けます)
   gem 'pry'
-
-  # コード整形・静的解析
   gem 'rubocop', require: false
 end

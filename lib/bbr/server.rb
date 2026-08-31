@@ -1,4 +1,3 @@
-require 'webrick'
 require 'fileutils'
 
 module Bbr
@@ -56,6 +55,8 @@ module Bbr
 
     # サーバープロセスの実体 (bin/bbr _server から呼ばれる)
     def run_foreground
+      require 'webrick' # prev 以外のコマンドを webrick 未導入でも動かすため遅延読み込み
+
       log = WEBrick::Log.new($stderr, WEBrick::Log::WARN)
       server = WEBrick::HTTPServer.new(
         Port: @port,
