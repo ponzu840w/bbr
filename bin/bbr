@@ -1,34 +1,31 @@
 #!/usr/bin/env ruby
 
-require 'bundler/setup'
 require 'pathname'
 require 'optparse'
 
-# 1. Rubyライブラリの場所を解決 (このスクリプトの親の親/lib)
-#    これで ~/work/bbr/bin/bbr がどこから呼ばれても lib を読み込めます
-exe_dir = Pathname.new(__dir__)
-system_root = exe_dir.parent
-lib_dir = exe_dir.parent.join('lib')
+# Rubyライブラリの場所を解決 (このスクリプトの親の親/lib)
+# これで ~/work/bbr/bin/bbr がどこから呼ばれても lib を読み込めます
+lib_dir = Pathname.new(__dir__).parent.join('lib')
 $LOAD_PATH.unshift(lib_dir.to_s)
 
+require 'bbr/context'
 require 'bbr/manager'
 require 'bbr/builder'
 require 'bbr/server'
 require 'bbr/database'
 
-# 2. ブログデータの場所を確認
-unless ENV['BLOG_ROOT']
-  puts "エラー: 環境変数 BLOG_ROOT が設定されていません。"
+# ブログデータの場所を確認
+unless ENV['BBR_REPO']
+  puts "エラー: 環境変数 BBR_REPO が設定されていません。"
   exit 1
 end
 
-# Pathnameオブジェクトにしておくと扱いやすい
-blog_root = Pathname.new(ENV['BLOG_ROOT'])
+context = Bbr::Context.new(ENV['BBR_REPO'])
 
 # コマンド分岐
 command = ARGV.shift
-manager = Bbr::Manager.new(blog_root, system_root)
-server = Bbr::Server.new(blog_root, system_root)
+manager = Bbr::Manager.new(context)
+server = Bbr::Server.new(context)
 
 # オプション解析
 options = {
@@ -79,26 +76,30 @@ when 'stop'
 when 'test'
   remaining_args = parser.parse(ARGV)
   id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
-  options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
-  target_id = options[:id] || manager.get_current_path&.basename&.to_s
 
-  unless target_id
+  require 'bbr/repository'
+  repo = Bbr::Repository.new(context)
+  article = id_arg ? repo.find(id_arg) : repo.current
+
+  unless article
     puts "エラー: 対象記事が特定できません。"
     exit 1
   end
 
+  options[:id] = article.id
+
   # --- V1 対話ロジック ---
   # オプション指定がない場合のみチェック
   if !options[:force] && !options[:update] && options[:image_mode] == :normal
-    db = Bbr::Database.new(blog_root.join('database.json'))
-    if db.get_record(target_id)
+    db = Bbr::Database.new(context.database_path)
+    if db.get_record(article.id)
       puts "過去のビルドが存在します。"
       puts "[C]ancel  : 中止"
       puts "[F]orce   : 強制ビルド (日付更新 + 画像全再生成)"
       puts "[U]pdate  : 更新ビルド (日付維持 + 画像増分)"
       print "どうしますか？ [C/f/u]: "
       ans = $stdin.gets.chomp.downcase
-      
+
       case ans
       when 'f'
         options[:force] = true
@@ -117,27 +118,28 @@ when 'test'
   end
   # ---
 
-  Bbr::Builder.new(blog_root, system_root).build(options)
+  Bbr::Builder.new(context).build(options)
 
 when 'clean'
-  target_id = manager.get_current_path&.basename&.to_s
-  unless target_id
+  require 'bbr/repository'
+  repo = Bbr::Repository.new(context)
+  article = repo.current
+  unless article
     puts "エラー: 対象記事が特定できません。"
     exit 1
   end
-  
+
   require 'bbr/image_optimizer'
-  article_dir = blog_root.join('article', target_id)
-  optimizer = Bbr::ImageOptimizer.new(article_dir)
+  optimizer = Bbr::ImageOptimizer.new(article.path)
   optimizer.clean
 
 when 'deploy'
   require 'bbr/deployer'
   remaining_args = parser.parse(ARGV)
   id_arg = remaining_args.find { |arg| arg =~ /^\d+$/ }
-  options[:id] = sprintf("%05d", id_arg.to_i) if id_arg
-  
-  Bbr::Deployer.new(blog_root).deploy(options)
+  options[:id] = id_arg if id_arg
+
+  Bbr::Deployer.new(context).deploy(options)
 
 # === 管理コマンド ===
 when 'new'
@@ -159,5 +161,5 @@ when 'pwd'
   path = manager.get_current_path
   puts path if path
 else
-  puts "使用法: bbr [prev|stop|test|clean|deploy|new|set|status|edit]"
+  puts "使用法: bbr [new|set|status|edit|dir|pwd|test|clean|prev|stop|deploy]"
 end

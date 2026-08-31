@@ -5,14 +5,10 @@ module Bbr
   class Context
     attr_reader :repo_root, :system_root
 
-    def initialize(repo_path = ENV['BBR_REPO'])
-      unless repo_path
-        raise "エラー: 環境変数 BBR_REPO が設定されていません。"
-      end
+    def initialize(repo_path)
+      raise ArgumentError, "Context: repo_path is required" if repo_path.nil?
 
-      # リポジトリのルート
       @repo_root = Pathname.new(repo_path)
-
       # lib/bbr/context.rb から見たシステムルート (../../)
       @system_root = Pathname.new(__dir__).parent.parent
     end
@@ -27,6 +23,10 @@ module Bbr
 
     def current_num_file
       @repo_root.join('currentnum')
+    end
+
+    def macro_file
+      @repo_root.join('html_article_define.m4')
     end
   end
 end

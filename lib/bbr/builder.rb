@@ -1,71 +1,51 @@
 require_relative 'database'
 require_relative 'text_parser'
 require_relative 'image_optimizer'
+require_relative 'repository'
 
 module Bbr
   class Builder
-    def initialize(blog_root, system_root)
-      @blog_root = blog_root
-      @system_root = system_root
-      
-      # 各種パス
-      @current_num_file = @blog_root.join('currentnum')
-      @article_base_dir = @blog_root.join('article')
-      @database_file = @blog_root.join('database.json')
+    def initialize(context)
+      @context = context
+      @repo = Repository.new(context)
     end
 
     def build(options)
-      # 1. 対象記事の特定
-      target_id = options[:id] || current_id
-      unless target_id
+      article = options[:id] ? @repo.find(options[:id]) : @repo.current
+      unless article
         puts "エラー: 対象記事が特定できません。bbr set するか引数で指定してください。"
         exit 1
       end
-      
-      article_dir = @article_base_dir.join(target_id)
-      src_file = article_dir.join("#{target_id}.m4")
-      html_file = article_dir.join("html.html") # 出力先
 
-      puts "=== 記事ビルド: #{target_id} ==="
+      puts "=== 記事ビルド: #{article.id} ==="
 
-      unless File.exist?(src_file)
-        puts "エラー: ソースファイルが見つかりません: #{src_file}"
+      unless article.source_path.exist?
+        puts "エラー: ソースファイルが見つかりません: #{article.source_path}"
         exit 1
       end
 
-      # 2. メタデータ抽出 & DB更新
-      parser = TextParser.new(@blog_root)
-      metadata = parser.extract_metadata(src_file)
-      
-      puts "  タイトル: #{metadata[:title]}"
-      
-      db = Database.new(@database_file)
-      # DB更新 (force/update オプションはここで処理)
-      db.update_record(target_id, metadata, options)
+      # 1. メタデータ抽出 & DB更新
+      parser = TextParser.new(@context.repo_root)
+      metadata = parser.extract_metadata(article.source_path)
 
-      # 3. 画像処理
+      puts "  タイトル: #{metadata[:title]}"
+
+      db = Database.new(@context.database_path)
+      db.update_record(article.id, metadata, options)
+
+      # 2. 画像処理
       if options[:image_mode] == :normal
-        optimizer = ImageOptimizer.new(article_dir, verbose: options[:verbose])
-        optimizer.run(src_file, options[:force])
+        optimizer = ImageOptimizer.new(article.path, verbose: options[:verbose])
+        optimizer.run(article.source_path, options[:force])
       else
         puts "  [IMG] 画像処理をスキップします (mode: #{options[:image_mode]})"
       end
 
-      # 4. HTML生成
-      # skip_image の場合は fatimage を直接参照するモードにする
+      # 3. HTML生成
       is_fat_mode = (options[:image_mode] == :fat)
-
-      html_content = parser.convert(src_file, target_id, is_fat_mode)
-      File.write(html_file, html_content)
-      puts "  [HTML] 生成完了: #{html_file}"
+      html_content = parser.convert(article.source_path, article.id, is_fat_mode)
+      File.write(article.html_path, html_content)
+      puts "  [HTML] 生成完了: #{article.html_path}"
     end
-
-    private
-
-    def current_id
-      return nil unless File.exist?(@current_num_file)
-      File.read(@current_num_file).strip
-    end
-
   end
 end

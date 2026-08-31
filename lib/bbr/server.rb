@@ -3,11 +3,11 @@ require 'fileutils'
 
 module Bbr
   class Server
-    def initialize(blog_root, system_root)
-      @blog_root = blog_root
-      @pid_file = system_root.join('.bbr_server.pid')
-      @log_file = system_root.join('.bbr_server.log')
-      @doc_root = @blog_root.realpath.parent # blogディレクトリの親
+    def initialize(context)
+      @context = context
+      @pid_file = context.system_root.join('.bbr_server.pid')
+      @log_file = context.system_root.join('.bbr_server.log')
+      @doc_root = context.repo_root.realpath.parent # blogディレクトリの親
       @port = 8000
     end
 

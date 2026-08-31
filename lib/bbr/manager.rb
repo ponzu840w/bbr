@@ -1,35 +1,31 @@
 require 'fileutils'
+require_relative 'article'
+require_relative 'repository'
+require_relative 'database'
+require_relative 'text_parser'
 
 module Bbr
   class Manager
-    def initialize(root_dir, system_root)
-      @root_dir = Pathname.new(root_dir)
-      @system_root = Pathname.new(system_root)
-      @article_dir = @root_dir.join('article')
-      @current_num_file = @root_dir.join('currentnum')
+    def initialize(context)
+      @context = context
+      @repo = Repository.new(context)
     end
 
     def show_status
-      id = current_article_id
-      unless id
+      article = @repo.current
+      unless article
         puts "現在選択されている記事はありません。"
         return
       end
 
-      article_dir = @article_dir.join(id)
-      m4_path = article_dir.join("#{id}.m4")
-      html_path = article_dir.join("html.html")
-      db_path = @root_dir.join('database.json')
-
+      id = article.id
       puts "=== BBR Status [#{id}] ==="
 
       # 1. タイトル取得 (m4がある場合)
-      if File.exist?(m4_path)
-        # 簡易的にタイトルだけ抜くために TextParser を使う
-        # (ただしextract_metadataはm4コマンドを叩くので少し重いが、確実)
+      if article.source_path.exist?
         begin
-          parser = TextParser.new(@root_dir)
-          meta = parser.extract_metadata(m4_path)
+          parser = TextParser.new(@context.repo_root)
+          meta = parser.extract_metadata(article.source_path)
           puts "Title:    #{meta[:title]}"
         rescue => e
           puts "Title:    (Error reading title: #{e.message})"
@@ -38,33 +34,33 @@ module Bbr
         puts "Title:    (Source file not found)"
       end
 
-      puts "Path:     #{article_dir}"
+      puts "Path:     #{article.path}"
       puts ""
 
       # 2. データベース状況
       puts "[Database]"
-      db = Database.new(db_path)
+      db = Database.new(@context.database_path)
       record = db.get_record(id)
-      
+
       db_time = nil
       if record
         db_time = Time.at(record[:time])
-        puts "  Status: \e[32mRELEASED\e[0m" # 緑色
+        puts "  Status: \e[32mRELEASED\e[0m"
         puts "  Time:   #{db_time.strftime('%Y-%m-%d %H:%M:%S')} (#{record[:time]})"
       else
-        puts "  Status: \e[31mNOT REGISTERED (Draft)\e[0m" # 赤色
+        puts "  Status: \e[31mNOT REGISTERED (Draft)\e[0m"
       end
       puts ""
 
       # 3. ビルド状況
       puts "[Build]"
-      if File.exist?(html_path)
-        html_mtime = File.mtime(html_path)
+      if article.html_path.exist?
+        html_mtime = File.mtime(article.html_path)
         puts "  HTML:   Exists (#{html_mtime.strftime('%Y-%m-%d %H:%M:%S')})"
-        
+
         if db_time
           if html_mtime > db_time
-            puts "  State:  \e[33mDIRTY (HTML is newer than DB)\e[0m" # 黄色
+            puts "  State:  \e[33mDIRTY (HTML is newer than DB)\e[0m"
           else
             puts "  State:  \e[32mCLEAN\e[0m"
           end
@@ -76,12 +72,8 @@ module Bbr
 
       # 4. 画像状況
       puts "[Images]"
-      fat_dir = article_dir.join('fatimage')
-      img_dir = article_dir.join('image')
-      
-      # 枚数カウント (隠しファイル除く)
-      fat_count = Dir.exist?(fat_dir) ? Dir.children(fat_dir).reject{|f| f.start_with?('.')}.size : 0
-      img_count = Dir.exist?(img_dir) ? Dir.children(img_dir).reject{|f| f.start_with?('.')}.size : 0
+      fat_count = article.fat_image_dir.exist? ? Dir.children(article.fat_image_dir).reject { |f| f.start_with?('.') }.size : 0
+      img_count = article.image_dir.exist?     ? Dir.children(article.image_dir).reject     { |f| f.start_with?('.') }.size : 0
 
       puts "  Source: #{fat_count} files (fatimage)"
       puts "  Output: #{img_count} files (image)"
@@ -89,87 +81,70 @@ module Bbr
       if fat_count == img_count
         puts "  State:  \e[32mOK\e[0m"
       else
-        # fatimageがあるのにimageが少ない、またはその逆
         puts "  State:  \e[33mMISMATCH (Run 'bbr build' to optimize)\e[0m"
       end
     end
 
     # 指定した番号をセットする (bbr set ID)
     def set_article(id)
-      # 5桁ゼロ埋めに正規化
-      formatted_id = sprintf("%05d", id.to_i)
-      target_path = File.join(@article_dir, formatted_id)
-
-      unless Dir.exist?(target_path)
-        puts "エラー: 記事ディレクトリ #{formatted_id} が見つかりません。"
+      article = @repo.find(id)
+      unless article.exists?
+        puts "エラー: 記事ディレクトリ #{article.id} が見つかりません。"
         exit 1
       end
 
-      # currentnum を更新
-      File.write(@current_num_file, formatted_id)
+      @repo.set_current(article)
+      update_symlink(article.path)
 
-      # ルートディレクトリの 'art' シンボリックリンクを更新 (旧互換性のため)
-      update_symlink(target_path)
-
-      puts "記事 #{formatted_id} をセットしました。"
+      puts "記事 #{article.id} をセットしました。"
     end
 
     # 新規記事を作成してセットする (bbr new)
     def create_new
-      new_id = next_article_id
-      new_dir = File.join(@article_dir, new_id)
+      new_id = @repo.next_id
+      new_dir = @context.articles_dir.join(new_id)
 
       puts "新規記事 #{new_id} を作成します..."
 
-      # ディレクトリ作成
       FileUtils.mkdir_p([
         new_dir,
-        File.join(new_dir, 'image'),
-        File.join(new_dir, 'fatimage')
+        new_dir.join('image'),
+        new_dir.join('fatimage')
       ])
 
-      # テンプレートm4作成
-      m4_path = File.join(new_dir, "#{new_id}.m4")
-      unless File.exist?(m4_path)
+      m4_path = new_dir.join("#{new_id}.m4")
+      unless m4_path.exist?
         File.write(m4_path, "_begin(タイトル,category,`tag1,tag2')\n\n本文\n")
       end
 
-      # 作成した記事をセット
       set_article(new_id)
     end
 
     # 記事をエディタで開く
     def edit_article
-      current_id = current_article_id
-      unless current_id
+      article = @repo.current
+      unless article
         puts "エラー: 作業中の記事が設定されていません。'bbr set <ID>' を実行してください。"
         return
       end
 
-      # 記事のメインm4ファイルパス
-      m4_path = @article_dir.join(current_id, "#{current_id}.m4")
-
-      unless File.exist?(m4_path)
-        puts "エラー: ファイルが見つかりません: #{m4_path}"
+      unless article.source_path.exist?
+        puts "エラー: ファイルが見つかりません: #{article.source_path}"
         return
       end
 
-      # 環境変数 EDITOR がなければ vim を使用
       editor = ENV['EDITOR'] || 'vim'
-      system(editor, m4_path.to_s)
+      system(editor, article.source_path.to_s)
     end
 
-    # 【追加】現在の記事パスを返す (bbr pwd用)
+    # 現在の記事パスを返す (bbr pwd 用)
     def get_current_path
-      id = current_article_id
-      return nil unless id
-
-      path = @article_dir.join(id)
-      return path if Dir.exist?(path)
-      nil
+      article = @repo.current
+      return nil unless article && article.path.directory?
+      article.path
     end
 
-    # 【追加】ファイラーで開く (bbr dir 用)
+    # ファイラーで開く (bbr dir 用)
     def open_directory
       path = get_current_path
       unless path
@@ -187,44 +162,10 @@ module Bbr
 
     private
 
-    # 現在のIDを取得するヘルパーメソッド
-    def current_article_id
-      return nil unless File.exist?(@current_num_file)
-      File.read(@current_num_file).strip
-    end
-
-    # 0番以降で空いている最小のIDを探索して返す
-    def next_article_id
-      return "00000" unless Dir.exist?(@article_dir)
-
-      # 1. 存在するIDを全て取得して整数化し、昇順にソートする
-      existing_ids = Dir.children(@article_dir)
-                        .select { |name| name.match?(/^\d+$/) }
-                        .map(&:to_i)
-                        .sort
-
-      # 2. ソート済みのリストを頭から照合し、インデックスと一致しない場所（欠番）を探す
-      existing_ids.each_with_index do |id, index|
-        if id != index
-          # 例: [0, 1, 3] の場合
-          # index 0, id 0 (OK)
-          # index 1, id 1 (OK)
-          # index 2, id 3 (NG! ここで 2 が抜けているとわかる)
-          return sprintf("%05d", index)
-        end
-      end
-
-      # 3. 途中に欠番がなければ、末尾の次の番号（つまり現在の記事数と同じ値）を返す
-      # 例: [0, 1, 2] (size=3) -> 次は 3
-      sprintf("%05d", existing_ids.size)
-    end
-
-    # ルートにある 'art' リンクを更新
+    # ルートにある 'art' リンクを更新（旧互換のため Manager 側に残す）
     def update_symlink(target_path)
-      link_path = @system_root.join('art')
-      # 既存リンクがあれば削除
+      link_path = @context.system_root.join('art')
       FileUtils.rm(link_path) if File.symlink?(link_path) || File.exist?(link_path)
-      # シンボリックリンク作成
       FileUtils.ln_s(target_path, link_path)
     end
   end
