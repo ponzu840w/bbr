@@ -85,6 +85,8 @@ module Bbr
       text.each_line do |line|
         # コードブロック終了判定
         if line.strip.start_with?('_codeE')
+          # 最終行の改行を落とす。pre内では閉じタグ直前の改行も1行として描画されるため
+          result[-1] = result[-1].chomp if state == :in_code
           result << "]]]]]" + line
           state = :outer
           next
