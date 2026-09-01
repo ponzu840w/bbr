@@ -21,6 +21,9 @@ define(_tips,`<div class="tips">')
 define(_tipsE,`</div>')
 define(_tsuiki,`<div class="tsuiki">')
 define(_tsuikiE,`</div>')
+# _tsuiki の綴り揺れ用の別名。CSSクラスは .tsuiki を共用する。
+define(_tuiki,`<div class="tsuiki">')
+define(_tuikiE,`</div>')
 # ●ポチ、数字による箇条書きは以下で囲む。その内部は一行一行がli要素となる。
 define(_123,`<ol>')
 define(_123E,`</ol>')

@@ -24,7 +24,7 @@ module Bbr
       # 1. タイトル取得 (m4がある場合)
       if article.source_path.exist?
         begin
-          parser = TextParser.new(@context.repo_root)
+          parser = TextParser.new(@context)
           meta = parser.extract_metadata(article.source_path)
           puts "Title:    #{meta[:title]}"
         rescue => e

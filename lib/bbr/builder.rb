@@ -25,7 +25,7 @@ module Bbr
       end
 
       # 1. メタデータ抽出 & DB更新
-      parser = TextParser.new(@context.repo_root)
+      parser = TextParser.new(@context)
       metadata = parser.extract_metadata(article.source_path)
 
       puts "  タイトル: #{metadata[:title]}"

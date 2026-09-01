@@ -2,9 +2,8 @@ require 'open3'
 
 module Bbr
   class TextParser
-    def initialize(blog_root)
-      @blog_root = blog_root
-      @macro_file = @blog_root.join('html_article_define.m4')
+    def initialize(context)
+      @macro_file = context.macro_file
     end
 
     # メタデータ (タイトル, カテゴリ, タグ) のみを抽出する

@@ -25,8 +25,9 @@ module Bbr
       @repo_root.join('currentnum')
     end
 
+    # マクロ定義は記事データではなくシステム側の資産
     def macro_file
-      @repo_root.join('html_article_define.m4')
+      @system_root.join('html_article_define.m4')
     end
   end
 end
